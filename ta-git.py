@@ -16,6 +16,7 @@ if __name__ == "__main__":
     #todo: add extension cmdline option
     extensions = ["*.cpp", "*.c", "*.hpp", "*.h", "*.py"]
     tagged = {}
+    tagit = {}
     for extension in extensions:
         for path in Path(os.path.curdir).rglob(extension):
             files.append(path)
@@ -36,9 +37,9 @@ if __name__ == "__main__":
                                 author_cmd = "git log -L "+l_num+","+l_num+":"+str(f)
                                 log = subprocess.check_output(author_cmd, shell=True)
                                 for l_line in log.splitlines(False):
-                                    str_line = str(l_line)
+                                    str_line = l_line.decode("utf-8")
                                     if "Author: " in str_line:
-                                        author = str_line.split("Author: ")[1][0:-1]
+                                        author = str_line.split("Author: ")[1][0:]
                             except:
                                 pass
 
@@ -51,4 +52,18 @@ if __name__ == "__main__":
         except:
             print("error: failed to read "+str(f)+" "+str(sys.exc_info()[0]))
 
-    print(json.dumps(tagged, sort_keys=True, indent=4))
+    logs = {}
+    try:
+        for tag in tags:
+            log_cmd = "git log --all --grep=\""+tag+"\""
+            log = subprocess.check_output(log_cmd, shell=True)
+            log = log.decode("utf-8")
+            if len(log) > 0:
+                logs[tag] = log
+    except:
+        pass
+
+    tagit["tagged"] = tagged
+    tagit["commits"] = logs
+    print(json.dumps(tagit, indent=4))
+        
