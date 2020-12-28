@@ -4,12 +4,22 @@ import os
 import sys
 import json
 import subprocess
+import collections.abc
+
+def update(d, u):
+    for k, v in u.items():
+        if isinstance(v, collections.abc.Mapping):
+            d[k] = update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
 
 if __name__ == "__main__":
 
     args = sys.argv[1:]
     tags = []
     paths = []
+    extra_info = False
     for i, arg in enumerate(args):
         if arg == "-t":
             tags.append(args[i+1])
@@ -60,9 +70,14 @@ if __name__ == "__main__":
                             if author not in tagged:
                                 tagged[author] = {}
                             if tag not in tagged[author]:
-                                tagged[author][tag] = []
-                            
-                            tagged[author][tag].append(str(f)+":"+l_num+":"+line[pos+len(tag):])
+                                tagged[author][tag] = {}
+                                
+                            line_message = line[pos+len(tag)+1:].lstrip().rstrip()
+                            line_str = str(f)+":"+l_num+":"
+                            if extra_info:
+                                update(tagged[author][tag], {line_str:{"msg":line_message}})
+                            else:
+                                tagged[author][tag].update({line_str:line_message})
         except:
             print("error: failed to read "+str(f)+" "+str(sys.exc_info()[0]))
 
