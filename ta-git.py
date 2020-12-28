@@ -7,7 +7,17 @@ import subprocess
 
 if __name__ == "__main__":
 
-    tags = sys.argv[1:]
+    args = sys.argv[1:]
+    tags = []
+    paths = []
+    for i, arg in enumerate(args):
+        if arg == "-t":
+            tags.append(args[i+1])
+        if arg == "-d":
+            paths.append(args[i+1])
+        
+    if len(paths) == 0:
+        paths.append(os.path.curdir)
     #todo: add prefix support cmdline option
     prefix = "#"
     tags = [prefix+tag if not tag[0] == prefix else tag for tag in tags]
@@ -17,12 +27,16 @@ if __name__ == "__main__":
     extensions = ["*.cpp", "*.c", "*.hpp", "*.h", "*.py"]
     tagged = {}
     tagit = {}
-    for extension in extensions:
-        for path in Path(os.path.curdir).rglob(extension):
-            files.append(path)
+    for in_path in paths:
+        for extension in extensions:
+            for path in Path(in_path).rglob(extension):
+                files.append(path)
 
     for f in files:
         try:
+            dirname = os.path.dirname(f)
+            basename = os.path.basename(f)
+            
             with open(f, "r") as r_file:
                 lines = r_file.readlines()
                 for line, i in zip(lines, range(0, len(lines))):
@@ -34,7 +48,7 @@ if __name__ == "__main__":
                             author = "No Author"
                             try:
                                 # check to see if we can find an author in git
-                                author_cmd = "git log -L "+l_num+","+l_num+":"+str(f)
+                                author_cmd = "cd "+dirname+";git log -L "+l_num+","+l_num+":"+basename
                                 log = subprocess.check_output(author_cmd, shell=True)
                                 for l_line in log.splitlines(False):
                                     str_line = l_line.decode("utf-8")
