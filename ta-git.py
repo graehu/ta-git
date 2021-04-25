@@ -23,8 +23,13 @@ if __name__ == "__main__":
     num_context = 4
     tag_format = """
 * {date} - [`"{path}"`]({path_link}) - {tag_line}
-* [{commit}]({origin_commit_link})
+* [{sha}]({origin_commit_link})
 {context}
+"""
+    log_format = """
+``` git
+{log}
+```
 """
     md_path = "ta-git.md"
     for i, arg in enumerate(args):
@@ -63,10 +68,7 @@ if __name__ == "__main__":
     else:
         origin_ssh = origin_http
         origin_http = "https://"+origin_ssh.split("@", 1)[1].replace(":", "/", 1)
-    print(origin_ssh)
-    print(origin_http)
     origin_base = os.path.basename(origin_http)
-    print(origin_base)
     for f in files:
         try:
             dirname = os.path.dirname(f)
@@ -75,17 +77,17 @@ if __name__ == "__main__":
             with open(f, "r") as r_file:
                 lines = r_file.readlines()
                 for line, i in zip(lines, range(0, len(lines))):
-                    lower_line = line.lower();
+                    lower_line = line.lower()
                     context = []
                     if num_context:
                         context = lines[i:min(len(lines), i+num_context)]
                     for tag in tags:
                         if tag in lower_line:
                             l_num = str(i+1)
-                            # pos = lower_line.find(tag)
                             author = "No Author"
                             date = ""
                             commit = ""
+                            log = ""
                             try:
                                 # check to see if we can find an author in git
                                 author_cmd = "cd "+dirname+";"
@@ -93,68 +95,95 @@ if __name__ == "__main__":
                                 author_cmd += "--date=iso8601 "
                                 author_cmd += "-L "+l_num+","+l_num+":"+basename+" "
                                 log = subprocess.check_output(author_cmd, shell=True)
-                                for l_line in log.splitlines(False):
-                                    str_line = l_line.decode("utf-8")
+                                log = log.decode("utf-8")
+                                for str_line in log.split("\n"):
                                     if str_line.startswith("Author: "):
                                         author = str_line.split("Author: ")[1][0:]
                                     if str_line.startswith("Date: "):
                                         date = str_line.split("Date:   ")[1][0:]
-                                        date = datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
                                     if str_line.startswith("commit "):
                                         commit = str_line.split("commit ")[1][0:]
                             except:
-                                pass
+                                print("error: "+str(sys.exc_info()[0]))
 
                             if author not in tagged:
                                 tagged[author] = {}
                             if tag not in tagged[author]:
                                 tagged[author][tag] = {}
+                            if "lines" not in tagged[author][tag]:
+                                tagged[author][tag]["lines"] = {}
+                            if "logs" not in tagged[author][tag]:
+                                tagged[author][tag]["logs"] = {}
 
-                            # line_message = line[pos+len(tag)+1:].lstrip().rstrip()
                             line_message = line.lstrip().rstrip()
                             line_str = str(f)+":"+l_num
                             if context:
                                 context.insert(0, "\n``` "+basename.split(".")[-1]+"\n")
                                 context.append("\n```")
-                            tagged[author][tag].update({line_str: {
+                            tagged[author][tag]["lines"].update({line_str: {
                                 "path": line_str,
                                 "path_link": line_str.replace(":", "#L"),
                                 "origin_path_link": origin_http.replace(".git", "/")+line_str.replace(":", "#L"),
                                 "date": date.split(" ")[0],
                                 "tag_line": line_message,
-                                "commit": commit,
+                                "sha": commit,
                                 "origin_commit_link": origin_http.replace(".git", "/commit/")+commit,
                                 "context": "".join(context)
                                 }})
+                            tagged[author][tag]["logs"].update({commit: {"date": date, "author": author, "log": log, "sha": commit}})
         except:
-            print("error: failed to read "+str(f)+" "+lstr(sys.exc_info()[0]))
+            print("error: failed to read "+str(f)+" "+str(sys.exc_info()[0]))
 
-    logs = {}
     try:
         for tag in tags:
             log_cmd = "git log --all --grep=\""+tag+"\""
             log = subprocess.check_output(log_cmd, shell=True)
             log = log.decode("utf-8")
             if len(log) > 0:
-                logs[tag] = log
+                author = "No Author"
+                date = ""
+                commit = ""
+                log = ""
+                for str_line in log.split("\n"):
+                    if str_line.startswith("Author: "):
+                        author = str_line.split("Author: ")[1][0:]
+                    if str_line.startswith("Date: "):
+                        date = str_line.split("Date:   ")[1][0:]
+                    if str_line.startswith("commit "):
+                        commit = str_line.split("commit ")[1][0:]
+                if author not in tagged:
+                    tagged[author] = {}
+                if tag not in tagged[author]:
+                    tagged[author][tag] = {}
+                if "logs" not in tagged[author][tag]:
+                    tagged[author][tag]["logs"] = {}
+
+                tagged[author][tag]["logs"].update({commit: {"date": date, "author": author, "log": log, "sha": commit}})
     except:
         pass
 
     tagit["tagged"] = tagged
-    tagit["commits"] = logs
-    markdown = ["# Tagit"]
+    markdown = ["# Ta-git"]
     for author, tags in tagged.items():
         markdown.append("## "+author)
         for tag, locations in tags.items():
             markdown.append("### "+tag)
             markdown.append("---------")
             items = []
-            for key, value in locations.items():
+            for key, value in locations["lines"].items():
                 items.append([value["date"], value])
             items.sort(key=lambda x: x[0], reverse=True)
             for item in items:
                 item[0] = item[0].split(" ")[0]
                 markdown.append(tag_format.format_map(item[1]))
+            items = []
+            markdown.append("## logs")
+            for key, value in locations["logs"].items():
+                items.append([value["date"], value])
+            items.sort(key=lambda x: x[0], reverse=True)
+            for item in items:
+                item[0] = item[0].split(" ")[0]
+                markdown.append(log_format.format_map(item[1]))
     md_dir = os.path.dirname(md_path)
     if md_dir:
         os.makedirs(os.path.dirname(md_path), exist_ok=True)
